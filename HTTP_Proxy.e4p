@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE Project SYSTEM "Project-4.6.dtd">
 <!-- eric4 project file for project HTTP_Proxy -->
-<!-- Saved: 2014-01-16, 12:35:24 -->
+<!-- Saved: 2014-01-16, 21:44:36 -->
 <!-- Copyright (C) 2014 Derek Fang, fangpengdong817@gmail.com -->
 <Project version="4.6">
   <Language></Language>
@@ -14,6 +14,8 @@
   <Sources>
     <Source>Proxy/Proxy.py</Source>
     <Source>__init__.py</Source>
+    <Source>Proxy/Service.py</Source>
+    <Source>Proxy/log.py</Source>
   </Sources>
   <Forms>
   </Forms>
