@@ -11,7 +11,7 @@ class proxy(object):
     
     chunk_length = 32768
     
-    def __init__(self, time_out, logger, **kwarg):
+    def __init__(self, time_out = None, logger = None, **kwarg):
         super(proxy, self).__init__()
         self.time_out = time_out
         self.logger = logger
@@ -23,17 +23,21 @@ class proxy(object):
                 break
             fwrite.write("%x\r\n%s\r\n" % (len(body),body))
             
-    @webob.dec.wsgify(RequestClass=Request)
-    def __call__(req):
-        host = req.host.split(":")[0]
+    @webob.dec.wsgify
+    def __call__(self, req):
+        url = None
+        ret = None
+        conn = None
+        body = None
         try:
-            if req.server_port == 443:
-                conn = httplib.HTTPSConnection(host, req.server_port, timeout = self.time_out)
+            if req.host_port == "443":
+                conn = httplib.HTTPSConnection(req.host, timeout = self.time_out)
+                url = req.path_qs.lstrip("https://").lstrip(req.host + ":" + req.server_port)
             else:
-                conn = httplib.HTTPConnection(host, req.server_port, timeout = self.time_out)
+                conn = httplib.HTTPConnection(req.host, timeout = self.time_out)
+                url = req.path_qs.lstrip("http://").lstrip(req.host)
         except Exception, e:
             conn.close()
-            pass
             
         i_headers = {}
         for tmp in req.headers:
@@ -45,11 +49,10 @@ class proxy(object):
             body = req.body
         
         try:
-            conn.request(req.method, req.path_qs.lstrip("http://").lstrip(req.host), body = body, headers = i_headers)
+            conn.request(req.method, url, body = body, headers = i_headers)
             ret = conn.getresponse()
         except Exception, e:
             conn.close()
-            pass
         
         resp = Response()
         resp.status = ret.status
@@ -77,4 +80,4 @@ socket = eventlet.listen(('0.0.0.0', 12345))
 #wsgi_kwargs = {'func':wsgi.server, 'site':hello_world, 'sock':socket, 'custom_pool':eventlet.GreenPool(1000)}
 #server = eventlet.spawn(**wsgi_kwargs)
 #server.wait()
-wsgi.server(socket, hello_world, custom_pool = eventlet.GreenPool(1000))
+wsgi.server(socket, proxy.factory({}), custom_pool = eventlet.GreenPool(1000))
