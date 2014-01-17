@@ -9,7 +9,7 @@ import httplib
 
 class proxy(object):
     
-    self.chunk_length = 32768
+    chunk_length = 32768
     
     def __init__(self, time_out, logger, **kwarg):
         super(proxy, self).__init__()
