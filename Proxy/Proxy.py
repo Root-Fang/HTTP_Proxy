@@ -118,8 +118,24 @@ class proxy(object):
         return cls(**local_conf)
 
 
+class SafeHttpProtocol(eventlet.wsgi.HttpProtocol):
+    """HttpProtocol wrapper to suppress IOErrors.
+
+       The proxy code above always shuts down client connections, so we catch
+       the IOError that raises when the SocketServer tries to flush the
+       connection.
+    """
+    def finish(self):
+        try:
+            eventlet.green.BaseHTTPServer.BaseHTTPRequestHandler.finish(self)
+        except IOError:
+            pass
+        eventlet.greenio.shutdown_safe(self.connection)
+        self.connection.close()
+
+
 socket = eventlet.listen(('0.0.0.0', 12345))
 #wsgi_kwargs = {'func':wsgi.server, 'site':hello_world, 'sock':socket, 'custom_pool':eventlet.GreenPool(1000)}
 #server = eventlet.spawn(**wsgi_kwargs)
 #server.wait()
-wsgi.server(socket, proxy.factory({}), custom_pool = eventlet.GreenPool(1000))
+wsgi.server(socket, proxy.factory({}), protocol=SafeHttpProtocol, custom_pool = eventlet.GreenPool(1000))
