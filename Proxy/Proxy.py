@@ -6,6 +6,7 @@ from webob import Request, Response
 from multiprocessing import cpu_count
 from StringIO import StringIO
 import httplib
+import socket
 
 class proxy(object):
     
@@ -23,21 +24,61 @@ class proxy(object):
                 break
             fwrite.write("%x\r\n%s\r\n" % (len(body),body))
             
+    def handshake(self, req, socks):
+        host = req.path_info.split(":")[0]
+        port = int(req.path_info.split(":")[1])
+        server = eventlet.connect((host, port))
+        
+        client = req.environ['eventlet.input'].get_socket()
+        client.sendall("HTTP/1.1 200 OK\r\n\r\n")
+        socks['client'] = client
+        socks['server'] = server
+        
+        
+    def one_way_proxy(self, source, dest):
+        """Proxy tcp connection from source to dest."""
+        while True:
+            try:
+                d = source.recv(32768)
+            except Exception:
+                d = None
+
+            if d is None or len(d) == 0:
+                #dest.shutdown(socket.SHUT_WR)
+                dest.close()
+                break
+            try:
+                dest.sendall(d)
+            except Exception:
+                source.close()
+                dest.close()
+                break
     @webob.dec.wsgify
     def __call__(self, req):
         url = None
         ret = None
         conn = None
         body = None
+        if req.method == "CONNECT":
+            socks = {}
+            t0 = eventlet.spawn(self.handshake, req, socks)
+            t0.wait()
+            client = socks['client']
+            server = socks['server']
+            t1 = eventlet.spawn(self.one_way_proxy, client, server)
+            t2 = eventlet.spawn(self.one_way_proxy, server, client)
+            t1.wait()
+            t2.wait()
+            
+            client.close()
+            server.close()
+            return
         try:
-            if req.host_port == "443":
-                conn = httplib.HTTPSConnection(req.host, timeout = self.time_out)
-                url = req.path_qs.lstrip("https://").lstrip(req.host + ":" + req.server_port)
-            else:
-                conn = httplib.HTTPConnection(req.host, timeout = self.time_out)
-                url = req.path_qs.lstrip("http://").lstrip(req.host)
+            conn = httplib.HTTPConnection(req.host, timeout = self.time_out)
+            url = req.path_qs.lstrip("http://").lstrip(req.host)
         except Exception, e:
             conn.close()
+            return
             
         i_headers = {}
         for tmp in req.headers:
@@ -52,7 +93,8 @@ class proxy(object):
             conn.request(req.method, url, body = body, headers = i_headers)
             ret = conn.getresponse()
         except Exception, e:
-            conn.close()
+            #conn.close()
+            return 
         
         resp = Response()
         resp.status = ret.status
