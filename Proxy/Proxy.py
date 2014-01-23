@@ -55,10 +55,10 @@ class proxy(object):
                 break
     @webob.dec.wsgify
     def __call__(self, req):
-        url = None
-        ret = None
-        conn = None
-        body = None
+#        url = None
+#        ret = None
+#        conn = None
+#        body = None
         if req.method == "CONNECT":
             socks = {}
             t0 = eventlet.spawn(self.handshake, req, socks)
@@ -73,44 +73,72 @@ class proxy(object):
             client.close()
             server.close()
             return
-        try:
-            conn = httplib.HTTPConnection(req.host, timeout = self.time_out)
-            url = req.path_qs.lstrip("http://").lstrip(req.host)
-        except Exception, e:
-            conn.close()
-            return
+        else:
+            host = req.host
+            port = int(req.host_port)
+            server = eventlet.connect((host, port))
+            client = req.environ['eventlet.input'].get_socket()
             
-        i_headers = {}
-        for tmp in req.headers:
-            i_headers[tmp] = req.headers[tmp]
-        
-        if req.is_body_readable:
-            body = req.body_file_seekable
-        else:
-            body = req.body
-        
-        try:
-            conn.request(req.method, url, body = body, headers = i_headers)
-            ret = conn.getresponse()
-        except Exception, e:
-            #conn.close()
-            return 
-        
-        resp = Response()
-        resp.status = ret.status
-        for tmp in ret.getheaders():
-            if tmp[0] == "content-type":
-                resp.content_type = tmp[1]
-            elif tmp[0] == "content-length":
-                resp.content_length = tmp[1]
-            else:
-                resp.headers.add(tmp[0], tmp[1])
-        if resp.headers.get("transfer-encoding", None) == "chunked":
-            self.read_chunk_body(ret, resp.body_file)
-        else:
-            resp.body = ret.read()
-        conn.close()
-        return resp
+            url = req.path_qs.lstrip("http://").lstrip(req.host)
+            server.sendall("%s %s %s\r\n" % (req.method, url, req.http_version))
+            for tmp in req.headers:
+                server.sendall("%s:%s\r\n" % (tmp, req.headers[tmp]))
+            server.sendall("\r\n")
+            if req.content_length != 0 or req.content_length != None:
+                body = ""
+                if req.headers.get("transfer-encoding", None) == "chunk" and req.is_body_readable:
+                    rtmp = req.body_file_seekable
+                    wtmp = StringIO()
+                    self.read_chunk_body(rtmp, wtmp)
+                    body = wtmp.read()
+                else:
+                    body = req.body
+                server.sendall(body)
+            
+            t = eventlet.spawn(self.one_way_proxy, server, client)
+            t.wait()
+            
+            server.close()
+            client.close()
+            return
+#        try:
+#            conn = httplib.HTTPConnection(req.host, timeout = self.time_out)
+#            url = req.path_qs.lstrip("http://").lstrip(req.host)
+#        except Exception, e:
+#            conn.close()
+#            return
+#            
+#        i_headers = {}
+#        for tmp in req.headers:
+#            i_headers[tmp] = req.headers[tmp]
+#        
+#        if req.is_body_readable:
+#            body = req.body_file_seekable
+#        else:
+#            body = req.body
+#        
+#        try:
+#            conn.request(req.method, url, body = body, headers = i_headers)
+#            ret = conn.getresponse()
+#        except Exception, e:
+#            #conn.close()
+#            return 
+#        
+#        resp = Response()
+#        resp.status = ret.status
+#        for tmp in ret.getheaders():
+#            if tmp[0] == "content-type":
+#                resp.content_type = tmp[1]
+#            elif tmp[0] == "content-length":
+#                resp.content_length = tmp[1]
+#            else:
+#                resp.headers.add(tmp[0], tmp[1])
+#        if resp.headers.get("transfer-encoding", None) == "chunked":
+#            self.read_chunk_body(ret, resp.body_file)
+#        else:
+#            resp.body = ret.read()
+#        conn.close()
+#        return resp
         
     @classmethod
     def factory(cls, global_conf, **local_conf):
