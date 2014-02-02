@@ -7,6 +7,7 @@ from multiprocessing import cpu_count
 from StringIO import StringIO
 import httplib
 import socket
+import traceback
 
 class proxy(object):
     
@@ -59,48 +60,52 @@ class proxy(object):
 #        ret = None
 #        conn = None
 #        body = None
-        if req.method == "CONNECT":
-            socks = {}
-            t0 = eventlet.spawn(self.handshake, req, socks)
-            t0.wait()
-            client = socks['client']
-            server = socks['server']
-            t1 = eventlet.spawn(self.one_way_proxy, client, server)
-            t2 = eventlet.spawn(self.one_way_proxy, server, client)
-            t1.wait()
-            t2.wait()
-            
-            client.close()
-            server.close()
-            return
-        else:
-            host = req.host
-            port = int(req.host_port)
-            server = eventlet.connect((host, port))
-            client = req.environ['eventlet.input'].get_socket()
-            
-            url = req.path_qs.lstrip("http://").lstrip(req.host)
-            server.sendall("%s %s %s\r\n" % (req.method, url, req.http_version))
-            for tmp in req.headers:
-                server.sendall("%s:%s\r\n" % (tmp, req.headers[tmp]))
-            server.sendall("\r\n")
-            if req.content_length != 0 or req.content_length != None:
-                body = ""
-                if req.headers.get("transfer-encoding", None) == "chunk" and req.is_body_readable:
-                    rtmp = req.body_file_seekable
-                    wtmp = StringIO()
-                    self.read_chunk_body(rtmp, wtmp)
-                    body = wtmp.read()
-                else:
-                    body = req.body
-                server.sendall(body)
-            
-            t = eventlet.spawn(self.one_way_proxy, server, client)
-            t.wait()
-            
-            server.close()
-            client.close()
-            return
+        try:
+            if req.method == "CONNECT":
+                socks = {}
+                t0 = self.pool.spawn(self.handshake, req, socks)
+                t0.wait()
+                client = socks['client']
+                server = socks['server']
+                t1 = self.pool.spawn(self.one_way_proxy, client, server)
+                t2 = self.pool.spawn(self.one_way_proxy, server, client)
+                t1.wait()
+                t2.wait()
+                
+                client.close()
+                server.close()
+                return
+            else:
+                host = req.host
+                port = int(req.host_port)
+                server = eventlet.connect((host, port))
+                client = req.environ['eventlet.input'].get_socket()
+                
+                url = req.path_qs.lstrip("http://").lstrip(req.host)
+                server.sendall("%s %s %s\r\n" % (req.method, url, req.http_version))
+                for tmp in req.headers:
+                    server.sendall("%s:%s\r\n" % (tmp, req.headers[tmp]))
+                server.sendall("\r\n")
+                if req.content_length != 0 or req.content_length != None:
+                    body = ""
+                    if req.headers.get("transfer-encoding", None) == "chunk" and req.is_body_readable:
+                        rtmp = req.body_file_seekable
+                        wtmp = StringIO()
+                        self.read_chunk_body(rtmp, wtmp)
+                        body = wtmp.read()
+                    else:
+                        body = req.body
+                    server.sendall(body)
+                
+                t = self.pool.spawn(self.one_way_proxy, server, client)
+                t.wait()
+                
+                server.close()
+                client.close()
+                return
+        except Exception, e:
+            sock = req.environ['eventlet.input'].get_socket()
+            sock.close()
 #        try:
 #            conn = httplib.HTTPConnection(req.host, timeout = self.time_out)
 #            url = req.path_qs.lstrip("http://").lstrip(req.host)
@@ -161,9 +166,17 @@ class SafeHttpProtocol(eventlet.wsgi.HttpProtocol):
         eventlet.greenio.shutdown_safe(self.connection)
         self.connection.close()
 
+if(proxy.pool == None):
+    proxy.pool = eventlet.GreenPool(1000)
 
-socket = eventlet.listen(('0.0.0.0', 12345))
+
+sock = eventlet.listen(('0.0.0.0', 12345))
+sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
 #wsgi_kwargs = {'func':wsgi.server, 'site':hello_world, 'sock':socket, 'custom_pool':eventlet.GreenPool(1000)}
 #server = eventlet.spawn(**wsgi_kwargs)
 #server.wait()
-wsgi.server(socket, proxy.factory({}), protocol=SafeHttpProtocol, custom_pool = eventlet.GreenPool(1000))
+try:
+    wsgi.server(sock, proxy.factory({}), protocol=SafeHttpProtocol, custom_pool = proxy.pool, keepalive = False)
+except Exception:
+    traceback.print_exc()
