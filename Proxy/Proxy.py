@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from eventlet import wsgi, api
+from eventlet import wsgi
 import eventlet
 import webob.dec
 from webob import Request, Response
@@ -145,38 +145,18 @@ class proxy(object):
 #        conn.close()
 #        return resp
         
-    @classmethod
-    def factory(cls, global_conf, **local_conf):
-        local_conf.update(global_conf)
-        return cls(**local_conf)
+def factory(global_conf, **local_conf):
+    local_conf.update(global_conf)
+    return proxy(**local_conf)
 
 
-class SafeHttpProtocol(eventlet.wsgi.HttpProtocol):
-    """HttpProtocol wrapper to suppress IOErrors.
-
-       The proxy code above always shuts down client connections, so we catch
-       the IOError that raises when the SocketServer tries to flush the
-       connection.
-    """
-    def finish(self):
-        try:
-            eventlet.green.BaseHTTPServer.BaseHTTPRequestHandler.finish(self)
-        except IOError:
-            pass
-        eventlet.greenio.shutdown_safe(self.connection)
-        self.connection.close()
-
-if(proxy.pool == None):
-    proxy.pool = eventlet.GreenPool(1000)
-
-
-sock = eventlet.listen(('0.0.0.0', 12345))
-sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
-#wsgi_kwargs = {'func':wsgi.server, 'site':hello_world, 'sock':socket, 'custom_pool':eventlet.GreenPool(1000)}
-#server = eventlet.spawn(**wsgi_kwargs)
-#server.wait()
-try:
-    wsgi.server(sock, proxy.factory({}), protocol=SafeHttpProtocol, custom_pool = proxy.pool, keepalive = False)
-except Exception:
-    traceback.print_exc()
+#sock = eventlet.listen(('0.0.0.0', 12345))
+#sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+#sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+##wsgi_kwargs = {'func':wsgi.server, 'site':hello_world, 'sock':socket, 'custom_pool':eventlet.GreenPool(1000)}
+##server = eventlet.spawn(**wsgi_kwargs)
+##server.wait()
+#try:
+#    wsgi.server(sock, proxy.factory({}), protocol=SafeHttpProtocol, custom_pool = proxy.pool, keepalive = False)
+#except Exception:
+#    traceback.print_exc()

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE Project SYSTEM "Project-4.6.dtd">
 <!-- eric4 project file for project HTTP_Proxy -->
-<!-- Saved: 2014-01-27, 16:56:36 -->
+<!-- Saved: 2014-02-06, 13:12:47 -->
 <!-- Copyright (C) 2014 Derek Fang, fangpengdong817@gmail.com -->
 <Project version="4.6">
   <Language></Language>
@@ -12,11 +12,14 @@
   <Author>Derek Fang</Author>
   <Email>fangpengdong817@gmail.com</Email>
   <Sources>
-    <Source>Proxy/Proxy.py</Source>
     <Source>__init__.py</Source>
-    <Source>Proxy/Service.py</Source>
-    <Source>Proxy/log.py</Source>
-    <Source>Proxy/proxy_exceptions.py</Source>
+    <Source>proxy/config.py</Source>
+    <Source>proxy/log.py</Source>
+    <Source>proxy/proxy.py</Source>
+    <Source>proxy/proxy_exceptions.py</Source>
+    <Source>proxy/Service.py</Source>
+    <Source>proxy/__init__.py</Source>
+    <Source>bin/proxy_start.py</Source>
   </Sources>
   <Forms>
   </Forms>
