@@ -11,7 +11,6 @@ import traceback
 import threading
 import sys
 
-default_host = "127.0.0.1"
 default_port = 12345
 
 def bool_check(value):
@@ -34,7 +33,7 @@ class Server(object):
         else:
             self.app_name = app_name
         if host is None:
-            self.host = default_host
+            self.host = socket.gethostbyname(socket.gethostname())
         else:
             self.host = host
         if port is None:
